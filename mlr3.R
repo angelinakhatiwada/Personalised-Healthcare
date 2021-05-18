@@ -5,6 +5,9 @@ library(mlr3misc)
 library(survival)
 library(mlr3tuning)
 library(mlr3benchmark)
+library(mlr3extralearners)
+install_learners('surv.coxboost')
+install_learners('surv.rfsrc')
 
 head(gbcs)
 dim(gbcs)
@@ -83,26 +86,6 @@ measure = lapply(c("surv.graf"), msr)
 prediction.cox$score(measure)
 
 
-
-cox.distr = ppl("distrcompositor", learner = lrn("surv.coxph"),
-                estimator = "kaplan", form = "ph", overwrite = FALSE, graph_learner = TRUE)
-
-temp <- cox.distr$train(task_gbcs)$predict(ND_gbcs)
-temp
-proba <- temp$distr$survival(surv_probs_Cox$time)
-
-----
-
-plot(surv_probs_Cox$time, proba$WeightDisc1, col = c("red"), type="l", ylim=c(0,1),
-     xlab = "Follow-Up Time (days)", ylab = "Survival Probabilities")
-
-lines(surv_probs_Cox$time, proba$WeightDisc1, col="red")
-lines(surv_probs_Cox$time, proba$WeightDisc2, col="blue")
-lines(surv_probs_Cox$time, proba$WeightDisc3, col="green")
-
-#lines are the same
-
-#can be adapted to everyt learner on mlr3
 
 
 #### -------------------####
