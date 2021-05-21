@@ -86,8 +86,6 @@ measure = lapply(c("surv.graf"), msr)
 prediction.cox$score(measure)
 
 
-
-
 #### -------------------####
 
 #trying new model Random Forest
@@ -121,7 +119,29 @@ prediction.forest$score()
 measure = lapply(c("surv.graf"), msr)
 prediction.cox$score(measure)
 
-#surv.harrell_c 
-#0.6982248 
+#---------------------------------------
+#dnnsurv model
+
+set.seed(123)
+train_set = sample(nrow(cov), 0.8 * nrow(cov))
+str(train_set)
+test_set = setdiff(seq_len(nrow(cov)), train_set)
+
+train_gbcs
+train_gbcs <- cov[train_set, ]
+dim(train_gbcs)
+head(train_gbcs)
+table(train_gbcs$censdead)
+
+test_gbcs <- cov[test_set, ]
+dim(test_gbcs)
+head(test_gbcs)
+table(test_gbcs$censdead)
 
 
+model  <- dnnsurv(time_variable = "survtime", status_variable = "censdead", data = train_gbcs,
+      early_stopping = TRUE, epochs = 100L, validation_split = 0.3)
+
+
+y_pred = predict(model, test_gbcs, type ="all") 
+y_pred$risk
