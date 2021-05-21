@@ -1,13 +1,18 @@
 library(survivalmodels)
-library(mlr3proba); library(mlr3); 
+library(mlr3)
+library(mlr3proba)  
 library(survival)
 library(mlr3misc)
 library(survival)
 library(mlr3tuning)
 library(mlr3benchmark)
 library(mlr3extralearners)
-install_learners('surv.coxboost')
+library(paradox)
+library(mlr3learners)
+#install_learners('surv.coxboost')
 install_learners('surv.rfsrc')
+
+#test/train split
 
 head(gbcs)
 dim(gbcs)
@@ -59,6 +64,9 @@ table(test_gbcs$censdead)
 
 
 # ------------------------------------------------------------------------
+#test/train split for mlr3
+
+
 task_gbcs = TaskSurv$new(id = "train_gbcs", backend = train_gbcs, time = "survtime", event = "censdead")
 test_gbcs = TaskSurv$new(id = "test_gbcs", backend = test_gbcs, time = "survtime", event = "censdead")
 
@@ -72,6 +80,10 @@ task_gbcs$nrow
 task_gbcs$feature_types
 
 test_gbcs$nrow
+
+# ------------------------------------------------------------------------
+# cox regression
+
 
 learner.cox = lrn("surv.coxph") 
 
@@ -88,26 +100,9 @@ prediction.cox$score(measure)
 
 #### -------------------####
 
-#trying new model Random Forest
-library(mlr3learners)
-
-
-task_gbcs = TaskSurv$new(id = "train_gbcs", backend = train_gbcs, time = "survtime", event = "censdead")
-test_gbcs = TaskSurv$new(id = "test_gbcs", backend = test_gbcs, time = "survtime", event = "censdead")
-
-NDml <- data.frame(age = 0, menopause = 1, hormone = 1,
-                   size = 0, grade1 = c(1,0,0), grade2=c(0,1,0), grade3=c(0,0,1), 
-                   nodes = 0, prog_recp=0, estrg_recp=0, survtime=1, censdead=1)
-ND_gbcs = TaskSurv$new(id = "NDml", backend = NDml, time = "survtime", event = "censdead")
-
-
-task_gbcs$nrow 
-task_gbcs$feature_types
-
-test_gbcs$nrow
+#Random Forest
 
 learner.forest = lrn("surv.rfsrc")
-
 
 learner.forest$train(task_gbcs)
 learner.forest$model
@@ -122,26 +117,48 @@ prediction.cox$score(measure)
 #---------------------------------------
 #dnnsurv model
 
-set.seed(123)
-train_set = sample(nrow(cov), 0.8 * nrow(cov))
-str(train_set)
-test_set = setdiff(seq_len(nrow(cov)), train_set)
-
-train_gbcs
-train_gbcs <- cov[train_set, ]
-dim(train_gbcs)
-head(train_gbcs)
-table(train_gbcs$censdead)
-
-test_gbcs <- cov[test_set, ]
-dim(test_gbcs)
-head(test_gbcs)
-table(test_gbcs$censdead)
-
-
-model  <- dnnsurv(time_variable = "survtime", status_variable = "censdead", data = train_gbcs,
+dnn_model  <- dnnsurv(time_variable = "survtime", status_variable = "censdead", data = train_gbcs,
       early_stopping = TRUE, epochs = 100L, validation_split = 0.3)
 
 
-y_pred = predict(model, test_gbcs, type ="all") 
+y_pred = predict(dnn_model, test_gbcs, type ="all") 
 y_pred$risk
+y_pred$surv
+
+
+#--------------------------
+#dnn with mlr3
+
+mlr_learners$get("surv.dnnsurv")
+
+learner.dnnsurv = lrn("surv.dnnsurv")
+
+learner.dnnsurv$train(task_gbcs)
+learner.dnnsurv$model
+
+learner.dnnsurv$param_set
+
+prediction.dnnsurv = learner.dnnsurv$predict(test_gbcs) 
+prediction.dnnsurv
+prediction.dnnsurv$score()
+
+#parameters setting
+
+#ps = ParamSet$new(list(
+#  ParamInt$new("epochs", default =100L),
+#  ParamDbl$new("validation_split", default =0.3),
+#  ParamLgl$new("early_stopping", default =TRUE)))
+
+
+#at = AutoTuner$new(
+#  learner = learner.dnnsurv,
+#  resampling = rsmp("holdout"),
+#  search_space = ps,
+#  measure = msr("surv.cindex"),
+#  terminator = trm("evals", n_evals = 2),
+#  tuner = tnr("random_search"))
+
+#surv.harrell_c with dnnsurv - 0.5224007
+#surv.harrell_c with cox - 0.6897718 
+#surv.harrell_c with random forest - 0.7154128 
+
