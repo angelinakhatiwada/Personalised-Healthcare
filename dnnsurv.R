@@ -57,10 +57,14 @@ dim(train_gbcs)
 head(train_gbcs)
 table(train_gbcs$censdead)
 
+train_gbcs
+
 test_gbcs <- cov[test_set, ]
 dim(test_gbcs)
 head(test_gbcs)
 table(test_gbcs$censdead)
+
+test_gbcs
 
 
 # ------------------------------------------------------------------------
@@ -68,7 +72,7 @@ table(test_gbcs$censdead)
 
 
 task_gbcs = TaskSurv$new(id = "train_gbcs", backend = train_gbcs, time = "survtime", event = "censdead")
-test_gbcs = TaskSurv$new(id = "test_gbcs", backend = test_gbcs, time = "survtime", event = "censdead")
+test_gbcs1 = TaskSurv$new(id = "test_gbcs", backend = test_gbcs, time = "survtime", event = "censdead")
 
 NDml <- data.frame(age = 0, menopause = 1, hormone = 1,
                    size = 0, grade1 = c(1,0,0), grade2=c(0,1,0), grade3=c(0,0,1), 
@@ -79,13 +83,17 @@ ND_gbcs = TaskSurv$new(id = "NDml", backend = NDml, time = "survtime", event = "
 task_gbcs$nrow 
 task_gbcs$feature_types
 
-test_gbcs$nrow
+test_gbcs1$nrow
 
 # ------------------------------------------------------------------------
 # cox regression
 
 
 learner.cox = lrn("surv.coxph") 
+
+
+
+
 
 learner.cox$train(task_gbcs)
 learner.cox$model 
@@ -108,7 +116,7 @@ learner.forest$train(task_gbcs)
 learner.forest$model
 
 prediction.forest = learner.forest$predict(test_gbcs) 
-prediction.forest
+prediction.forest$crank
 prediction.forest$score()
 
 measure = lapply(c("surv.graf"), msr)
@@ -117,34 +125,52 @@ prediction.cox$score(measure)
 #---------------------------------------
 #dnnsurv model
 
+library(keras)
+library(pseudo)
+
 dnn_model  <- dnnsurv(time_variable = "survtime", status_variable = "censdead", data = train_gbcs,
-      early_stopping = TRUE, epochs = 100L, validation_split = 0.3)
+      early_stopping = TRUE, epochs = 10L, validation_split = 0.3, cutpoints = qt)
 
 
 y_pred = predict(dnn_model, test_gbcs, type ="all") 
-y_pred$risk
+abs(y_pred$risk)
 y_pred$surv
 
+qt
 
 #--------------------------
 #dnn with mlr3
 
+#set.seed(123)
 mlr_learners$get("surv.dnnsurv")
 
-learner.dnnsurv = lrn("surv.dnnsurv")
+library(dplyr)
+
+train_gbcs_main <- data.frame(train_gbcs["censdead"],train_gbcs["survtime"])
+df <- train_gbcs_main %>% filter(censdead == 1)
+df <- dplyr::pull(df, survtime)
+qt <- unname(quantile(df,seq(0.2,1,0.2)))
+
+train_gbcs_main
+train_gbcs
+
+learner.dnnsurv = lrn("surv.dnnsurv", cutpoints = qt, epochs =10L, validation_split = 0.2, early_stopping = TRUE, batch_size = 16)
+
+task_gbcs
 
 learner.dnnsurv$train(task_gbcs)
 learner.dnnsurv$model
 
 learner.dnnsurv$param_set
 
-prediction.dnnsurv = learner.dnnsurv$predict(test_gbcs) 
+prediction.dnnsurv = learner.dnnsurv$predict(test_gbcs1) 
 prediction.dnnsurv
 prediction.dnnsurv$score()
 
 #parameters setting
 
-#ps = ParamSet$new(list(
+#ps = ParamSet$new(
+#  params = list(
 #  ParamInt$new("epochs", default =100L),
 #  ParamDbl$new("validation_split", default =0.3),
 #  ParamLgl$new("early_stopping", default =TRUE)))
@@ -161,4 +187,47 @@ prediction.dnnsurv$score()
 #surv.harrell_c with dnnsurv - 0.5224007
 #surv.harrell_c with cox - 0.6897718 
 #surv.harrell_c with random forest - 0.7154128 
+
+
+library(mlr3tuning)
+library("paradox")
+
+search_space = ps(
+  verbose = p_int(lower=0, upper=2)
+)
+search_space
+
+CVstrat = rsmp("cv", folds = 3)
+
+measure = msr("surv.cindex")
+print(measure)
+
+evalsTerm = trm("stagnation")
+
+instance = TuningInstanceSingleCrit$new(
+  task = task_gbcs,
+  learner = learner.dnnsurv,
+  resampling = CVstrat,
+  measure = measure,
+  search_space = search_space,
+  terminator = evalsTerm)
+
+tuner = tnr("random_search")
+
+#future::plan(multicore=4)
+
+tuner$optimize(instance)
+
+instance$is_terminated
+instance$result_learner_param_vals
+
+as.data.table(instance$archive)
+
+learner.cb$param_set$values = instance$result_learner_param_vals
+learner.cb$train(task_gbcs)
+learner.cb$model
+
+prediction.cb = learner.cb$predict(test_gbcs)
+prediction.cb
+prediction.cb$score()
 
