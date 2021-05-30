@@ -144,14 +144,12 @@ y_pred$surv
 #without any parameters
 mlr_learners$get("surv.dnnsurv")
 
-set.seed(NULL)
 learner.dnnsurv = lrn("surv.dnnsurv", cutpoints = qt)
 
 
 learner.dnnsurv$train(task_gbcs)
 learner.dnnsurv$model
 
-set.seed(NULL)
 prediction.dnnsurv = learner.dnnsurv$predict(test_gbcs1) 
 prediction.dnnsurv$crank
 prediction.dnnsurv$score()
@@ -178,7 +176,7 @@ prediction.dnnsurv$score()
 
 
 
-learner.dnnsurv = lrn("surv.dnnsurv", cutpoints = qt, validation_split = 0.2, batch_size = 16, verbose=1, early_stopping = TRUE)
+learner.dnnsurv = lrn("surv.dnnsurv", cutpoints = qt, validation_split = 0.3, batch_size = 16, verbose=1, early_stopping = TRUE)
 
 search_space = ps(
   epochs = p_int(10, 25)
@@ -211,15 +209,23 @@ instance$is_terminated
 instance$result_learner_param_vals
 
 as.data.table(instance$archive)
-
 learner.dnnsurv$param_set$values = instance$result_learner_param_vals
-learner.dnnsurv$train(task_gbcs)
+
+i <- 1
+scores <- c()
+while (i < 101) {
+  learner.dnnsurv$train(task_gbcs)
+  prediction.dnnsurv = learner.dnnsurv$predict(test_gbcs1)
+  scores <-c(scores,prediction.dnnsurv$score())
+  i = i+1
+}
+
+summary(scores)
+
+
+#learner.dnnsurv$model
+#prediction.dnnsurv
 learner.dnnsurv$model
-
-prediction.dnnsurv = learner.dnnsurv$predict(test_gbcs1)
-prediction.dnnsurv
-prediction.dnnsurv$score()
-
 
 
 
