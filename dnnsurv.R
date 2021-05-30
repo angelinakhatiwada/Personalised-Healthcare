@@ -83,7 +83,11 @@ task_gbcs$feature_types
 
 test_gbcs1$nrow
 
-set.seed(NULL)
+task_gbcs
+test_gbcs1
+
+
+#set.seed(NULL)
 # ------------------------------------------------------------------------
 # cox regression
 
@@ -158,30 +162,39 @@ prediction.dnnsurv$score()
 #--------------------------
 #with parameters tuning
 
-learner.dnnsurv = lrn("surv.dnnsurv", cutpoints = qt, epochs =100L, validation_split = 0.2, batch_size = 32, early_stopping = TRUE)
+learner.dnnsurv = lrn("surv.dnnsurv", cutpoints = qt, epochs =100L, validation_split = 0.3, batch_size = 32, verbose =1)
 
-learner.dnnsurv$train(task_gbcs)
-learner.dnnsurv$model
+i <- 1
+scores1 <- c()
+while (i < 100) {
+  print(i)
+  learner.dnnsurv$train(task_gbcs)
+  #learner.dnnsurv$model
+  learner.dnnsurv$param_set
+  prediction.dnnsurv = learner.dnnsurv$predict(test_gbcs1) 
+  #prediction.dnnsurv$crank
+  scores1 =c(scores1,prediction.dnnsurv$score())
+  i = i+1
+}
+
+summary(scores1)
 learner.dnnsurv$param_set
-
-prediction.dnnsurv = learner.dnnsurv$predict(test_gbcs1) 
-#prediction.dnnsurv$crank
-prediction.dnnsurv$score()
-
 
 # ------------------------
 #parameters tuning with CV
 # 5 folds
 #candidates for tuning: batch_size, epochs, validation_split, shuffle, optimizer's parameters
 
+#learner.dnnsurv = lrn("surv.dnnsurv", cutpoints = qt, validation_split = 0.3, batch_size = 16, verbose=1, early_stopping = TRUE)
 
-
-learner.dnnsurv = lrn("surv.dnnsurv", cutpoints = qt, validation_split = 0.3, batch_size = 16, verbose=1, early_stopping = TRUE)
+learner.dnnsurv = lrn("surv.dnnsurv", cutpoints = qt, validation_split = 0.3, batch_size = 32, verbose=1)
 
 search_space = ps(
-  epochs = p_int(10, 25)
+  epochs = p_fct(c(10,100))
 )
 search_space
+
+#search_space = ps(epochs = p_fct(c(10, 100)))
 
 #search_space = ps(optimizer_adam(lr = p_fct(c(0.001, 0.01, 0.1))))
 
@@ -214,6 +227,7 @@ learner.dnnsurv$param_set$values = instance$result_learner_param_vals
 i <- 1
 scores <- c()
 while (i < 101) {
+  print(i)
   learner.dnnsurv$train(task_gbcs)
   prediction.dnnsurv = learner.dnnsurv$predict(test_gbcs1)
   scores <-c(scores,prediction.dnnsurv$score())
@@ -222,10 +236,7 @@ while (i < 101) {
 
 summary(scores)
 
-
 #learner.dnnsurv$model
 #prediction.dnnsurv
-learner.dnnsurv$model
-
 
 
